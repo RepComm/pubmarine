@@ -1,0 +1,34 @@
+{
+  "name": "pubmarine",
+  "version": "0.1.0",
+  "description": "ephemeral pub sub networking for node/web",
+  "main": "dst/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/repcomm/pubmarine.git"
+  },
+  "keywords": [
+    "pub",
+    "sub",
+    "net",
+    "web",
+    "node",
+    "lib"
+  ],
+  "author": "Jon Crowder",
+  "license": "Unlicense",
+  "bugs": {
+    "url": "https://github.com/repcomm/pubmarine/issues"
+  },
+  "homepage": "https://github.com/repcomm/pubmarine#readme",
+  "devDependencies": {
+    "@types/node": "^20.8.10"
+  },
+  "dependencies": {
+    "@types/websocket": "^1.0.8",
+    "websocket": "^1.0.34"
+  }
+}
