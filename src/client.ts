@@ -1,5 +1,5 @@
 
-import type { ClientAuth, ClientAuthReq, InstanceReq, InstanceRes, MsgRes, Shape } from "./common.d.ts";
+import type { ClientAuth, ClientAuthReq, InstanceReq, InstanceRes, MsgReq, MsgRes, Shape } from "./common.d.ts";
 
 export interface OnChange<InstanceType> {
   (data: InstanceType): void;
@@ -62,6 +62,7 @@ export class Client {
 
         //if json has a valid id
         if (json.id) {
+          console.log("WSS sent response", json);
           //we probably used it for storing a resolver
           const _resolve = this.responseResolvers.get(json.id);
           if (_resolve) {
@@ -83,7 +84,7 @@ export class Client {
         type,
         msg,
         id: this.generateMessageId()
-      };
+      } as MsgReq<any>;
       const str = JSON.stringify(data);
 
       this.responseResolvers.set(data.id, _resolve);
@@ -124,6 +125,9 @@ export class Client {
     return this.sendMessage("echo", {msg});
   }
   mutate (id: string, data: any) {
-    this.sendMessage("mut", {change: data});
+    this.sendMessage("mut", {
+      id,
+      change: data
+    });
   }
 }

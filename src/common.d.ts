@@ -33,6 +33,11 @@ export interface Shape {
   children?: {[key: string]: ShapeTypeMap[ShapeTypes]}
 }
 
+export interface MsgReq<T> {
+  id: number;
+  type: string;
+  msg: T;
+}
 export interface MsgRes<T> {
   id: number;
   response: T;

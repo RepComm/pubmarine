@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "outDir": "dst",
+    "target": "ESNext",
+    // "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*"]
+}
