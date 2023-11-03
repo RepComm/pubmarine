@@ -97,6 +97,9 @@ export class Client {
         return this.sendMessage("echo", { msg });
     }
     mutate(id, data) {
-        this.sendMessage("mut", { change: data });
+        this.sendMessage("mut", {
+            id,
+            change: data
+        });
     }
 }

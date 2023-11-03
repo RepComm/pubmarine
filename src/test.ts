@@ -1,4 +1,4 @@
-import { Client } from "./client";
+import { Client } from "./client.js";
 
 async function main () {
 
@@ -52,7 +52,8 @@ async function main () {
   }
   
   //instantiate a player, will be owned by our client
-  client.instance<Player>("players").then((p)=>{
+  client.instance("players").then((p)=>{
+    //@ts-expect-error
     const localId = p.id;
     
     //upload our initial player data
@@ -87,3 +88,4 @@ async function main () {
   });
 }
 
+main();

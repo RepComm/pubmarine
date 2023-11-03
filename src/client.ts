@@ -1,5 +1,5 @@
 
-import type { ClientAuth, ClientAuthReq, InstanceReq, InstanceRes, MsgReq, MsgRes, Shape } from "./common.d.ts";
+import type { ClientAuth, ClientAuthReq, MsgReq, MsgRes, Shape } from "./common.d.ts";
 
 export interface OnChange<InstanceType> {
   (data: InstanceType): void;
@@ -118,8 +118,10 @@ export class Client {
   getSchema (topic: string) {
     return this.sendMessage("schema-get", {topic});
   }
-  instance <InstanceType>(topic: string) {
-    return this.sendMessage<InstanceRes<InstanceType>>("instance", {topic} as InstanceReq);
+  instance (topic: string) {
+    return this.sendMessage(
+      "instance", {topic}
+    );
   }
   echo (msg: string) {
     return this.sendMessage("echo", {msg});

@@ -1,4 +1,4 @@
-import { Client } from "./client";
+import { Client } from "./client.js";
 async function main() {
     //apiKey roles will determine API allowances, all on server side
     //see docs for creating api keys
@@ -38,6 +38,7 @@ async function main() {
     });
     //instantiate a player, will be owned by our client
     client.instance("players").then((p) => {
+        //@ts-expect-error
         const localId = p.id;
         //upload our initial player data
         client.mutate(localId, {
@@ -62,3 +63,4 @@ async function main() {
         }, 250);
     });
 }
+main();

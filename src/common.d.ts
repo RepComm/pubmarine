@@ -41,12 +41,11 @@ export interface MsgReq<T> {
 export interface MsgRes<T> {
   id: number;
   response: T;
+  error?: string;
 } 
 
-export interface InstanceReq {
-  topic: string;
-}
-export interface InstanceRes<InstanceType> {
-  id: string;
-  data: InstanceType;
-}
+export type InstanceReq = MsgReq<{topic: string}>;
+// export type InstanceRes = MsgRes<{id: string}>;
+
+export type SchemaCreateReq = MsgReq<{topic: string, shape: Shape}>;
+
