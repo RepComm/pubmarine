@@ -56,13 +56,6 @@ async function main () {
     //@ts-expect-error
     const localId = p.id;
     
-    //upload our initial player data
-    client.mutate(localId, {
-      name: "RepComm",
-      x: 0,
-      y: 0
-    });
-  
     //listen to changes to players
     client.subscribe<Player>({
   
@@ -70,20 +63,27 @@ async function main () {
       
       id: localId, //only listen to our player
       
-      onlyDeliverDeltas: true //download only the changes
     }, (data)=>{
       console.log(data);
     });
+
+    //upload our initial player data
+    client.mutate("players", localId, {
+      name: "RepComm",
+      x: 0,
+      y: 0
+    });
+  
   
     //simulate changing constantly from our end
     setInterval(()=>{
   
-      client.mutate(localId, {
+      client.mutate("players", localId, {
         x: Date.now(),
         y: Date.now()
       });
   
-    }, 250);
+    }, 1000);
   
   });
 }

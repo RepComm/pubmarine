@@ -1,16 +1,8 @@
 
-import type { ClientAuth, ClientAuthReq, MsgReq, MsgRes, Shape } from "./common.d.ts";
+import type { ClientAuth, ClientAuthReq, MsgReq, MsgRes, Shape, SubConfig } from "./common.d.ts";
 
 export interface OnChange<InstanceType> {
   (data: InstanceType): void;
-}
-export interface SubConfig {
-  /**Which schema to subscribe to*/
-  topic: string;
-  /**ID of specific instance if applicable*/
-  id?: string;
-  /**Only stream delta changes to subscribe callback*/
-  onlyDeliverDeltas: boolean;
 }
 
 export interface Resolver<T> {
@@ -102,7 +94,7 @@ export class Client {
   subscribe<InstanceType> (topic: string|SubConfig, cb: OnChange<InstanceType>) {
     let cfg = topic as SubConfig;
     if (typeof(topic) === "string") {
-      cfg.onlyDeliverDeltas = false;
+      // cfg.onlyDeliverDeltas = false;
     } else {
       cfg = topic;
       topic = cfg.topic as string;
@@ -126,8 +118,9 @@ export class Client {
   echo (msg: string) {
     return this.sendMessage("echo", {msg});
   }
-  mutate (id: string, data: any) {
+  mutate (topic: string, id: string, data: any) {
     this.sendMessage("mut", {
+      topic,
       id,
       change: data
     });

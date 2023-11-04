@@ -73,7 +73,7 @@ export class Client {
     subscribe(topic, cb) {
         let cfg = topic;
         if (typeof (topic) === "string") {
-            cfg.onlyDeliverDeltas = false;
+            // cfg.onlyDeliverDeltas = false;
         }
         else {
             cfg = topic;
@@ -96,8 +96,9 @@ export class Client {
     echo(msg) {
         return this.sendMessage("echo", { msg });
     }
-    mutate(id, data) {
+    mutate(topic, id, data) {
         this.sendMessage("mut", {
+            topic,
             id,
             change: data
         });

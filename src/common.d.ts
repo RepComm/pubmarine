@@ -46,6 +46,16 @@ export interface MsgRes<T> {
 
 export type InstanceReq = MsgReq<{topic: string}>;
 // export type InstanceRes = MsgRes<{id: string}>;
-
+export type MutateReq = MsgReq<{
+  topic: string;
+  id: string;
+  change: any;
+}>;
 export type SchemaCreateReq = MsgReq<{topic: string, shape: Shape}>;
 
+export interface SubConfig {
+  /**Which schema to subscribe to*/
+  topic: string;
+  /**ID of specific instance if applicable*/
+  id?: string;
+}

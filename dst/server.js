@@ -37,11 +37,50 @@ async function main() {
     });
     const wsList = new Set();
     const schemas = new Map();
+    const subscriptions = new Map();
+    function subStorageGetOrCreate(topic) {
+        let result = subscriptions.get(topic);
+        if (!result) {
+            result = {
+                topicSubscribers: new Set(),
+                idSubScribers: new Map()
+            };
+            subscriptions.set(topic, result);
+        }
+        return result;
+    }
+    function idSubsListGetOrCreate(storage, id) {
+        let list = storage.idSubScribers.get(id);
+        if (!list) {
+            list = new Set();
+            storage.idSubScribers.set(id, list);
+        }
+        return list;
+    }
+    function addSubscriber(topic, id = undefined, ws) {
+        const storage = subStorageGetOrCreate(topic);
+        if (id) {
+            idSubsListGetOrCreate(storage, id).add(ws);
+            console.log("Added sub", topic, id, ws.remoteAddress);
+        }
+        else {
+            storage.topicSubscribers.add(ws);
+            console.log("Added sub", topic, ws.remoteAddress);
+        }
+    }
+    function walkSubscribers(topic, id = undefined, cb) {
+        const storage = subStorageGetOrCreate(topic);
+        let list = id === undefined ?
+            storage.topicSubscribers :
+            idSubsListGetOrCreate(storage, id);
+        for (const ws of list) {
+            cb(ws);
+        }
+    }
     const onWebSocketMessage = (ws, msg) => {
         if (msg.type !== "utf8")
             return;
         const content = msg.utf8Data;
-        // console.log("ws sent", content);
         let req;
         try {
             req = JSON.parse(content);
@@ -61,31 +100,88 @@ async function main() {
                 res.error = "Not impl yet";
                 break;
             case "schema-set":
-                let { topic, shape } = req.msg;
-                if (schemas.has(topic)) {
-                    res.error = `Invalid auth to create schema`;
-                }
-                else {
-                    console.log("schema-set", topic);
-                    schemas.set(topic, shape);
+                {
+                    let { topic, shape } = req.msg;
+                    if (schemas.has(topic)) {
+                        res.error = `Invalid auth to create schema`;
+                    }
+                    else {
+                        console.log("schema-set", topic);
+                        schemas.set(topic, {
+                            shape,
+                            instances: new Map()
+                        });
+                    }
                 }
                 break;
             case "instance":
-                let _topic = req.msg.topic;
-                if (schemas.has(_topic)) {
-                    res.response.id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
-                    console.log("instance", res.response.id);
-                }
-                else {
-                    res.error = `Schema by id ${_topic} was not found`;
+                {
+                    const topic = req.msg.topic;
+                    const storage = schemas.get(topic);
+                    if (!storage) {
+                        res.error = `schema for topic was not found`;
+                        break;
+                    }
+                    const instanceId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
+                    res.response.id = instanceId;
+                    storage.instances.set(instanceId, {});
+                    console.log("instance", instanceId);
                 }
                 break;
             case "mut":
-                console.log("mut", req.msg.id, req.msg.change);
-                res.error = "Not impl yet";
+                {
+                    const { topic, id, change } = req.msg;
+                    // console.log("mut", req);
+                    if (!topic) {
+                        res.error = "missing req.msg.topic, cannot mutate record";
+                        break;
+                    }
+                    if (!id) {
+                        res.error = "missing req.msg.id, cannot mutate record";
+                        break;
+                    }
+                    if (!change) {
+                        res.error = "missing req.msg.change, cannot mutate record";
+                        break;
+                    }
+                    const storage = schemas.get(topic);
+                    if (!storage) {
+                        res.error = "No schema found by topic";
+                        break;
+                    }
+                    const old = storage.instances.get(id);
+                    //TODO - allow to ignore actually changed data propagation
+                    //essentially allow clients to "update" when the data may be completely similar
+                    //would be faster but sacrifice network bandwidth in some cases
+                    for (const key in change) {
+                        const isChanged = old[key] !== change[key];
+                        if (isChanged) {
+                            old[key] = change[key];
+                        }
+                        else {
+                            change[key] = undefined;
+                            delete change[key];
+                        }
+                    }
+                    const subRes = {
+                        type: "sub-res",
+                        response: {
+                            topic, id, change
+                        },
+                        id: -1
+                    };
+                    const subResStr = JSON.stringify(subRes);
+                    walkSubscribers(topic, id, (ws) => {
+                        ws.send(subResStr);
+                        // console.log("Sending mutation to client who sub'd");
+                    });
+                }
                 break;
             case "sub":
-                res.error = "Not impl yet";
+                {
+                    const { topic, id } = req.msg;
+                    addSubscriber(topic, id, ws);
+                }
                 break;
             case "unsub":
                 res.error = "Not impl yet";
