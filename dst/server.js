@@ -186,6 +186,19 @@ async function main() {
             case "unsub":
                 res.error = "Not impl yet";
                 break;
+            case "list":
+                const topic = req.msg.topic;
+                const storage = schemas.get(topic);
+                if (!storage) {
+                    res.error = `schema for topic was not found`;
+                    break;
+                }
+                const list = {};
+                storage.instances.forEach((v, k) => {
+                    list[k] = v;
+                });
+                res.response.list = list;
+                break;
         }
         let str = JSON.stringify(res);
         ws.send(str);

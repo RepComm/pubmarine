@@ -93,6 +93,11 @@ export class Client {
     instance(topic) {
         return this.sendMessage("instance", { topic });
     }
+    listInstances(topic) {
+        return this.sendMessage("list", {
+            topic
+        });
+    }
     echo(msg) {
         return this.sendMessage("echo", { msg });
     }

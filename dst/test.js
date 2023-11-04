@@ -61,5 +61,8 @@ async function main() {
             });
         }, 1000);
     });
+    client.listInstances("players").then((res) => {
+        console.log("list", res);
+    });
 }
 main();

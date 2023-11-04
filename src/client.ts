@@ -115,6 +115,11 @@ export class Client {
       "instance", {topic}
     );
   }
+  listInstances (topic: string) {
+    return this.sendMessage("list", {
+      topic
+    });
+  }
   echo (msg: string) {
     return this.sendMessage("echo", {msg});
   }
