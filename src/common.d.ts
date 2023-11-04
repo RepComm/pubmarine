@@ -38,7 +38,10 @@ export interface MsgReq<T> {
   type: string;
   msg: T;
 }
-export interface MsgRes<T> {
+export interface MsgResResponse {
+  type: string;
+}
+export interface MsgRes<T extends MsgResResponse> {
   id: number;
   response: T;
   error?: string;

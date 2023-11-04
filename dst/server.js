@@ -59,7 +59,7 @@ async function main() {
     }
     function addSubscriber(topic, id = undefined, ws) {
         const storage = subStorageGetOrCreate(topic);
-        if (id) {
+        if (id !== undefined) {
             idSubsListGetOrCreate(storage, id).add(ws);
             console.log("Added sub", topic, id, ws.remoteAddress);
         }
@@ -125,7 +125,7 @@ async function main() {
                     const instanceId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
                     res.response.id = instanceId;
                     storage.instances.set(instanceId, {});
-                    console.log("instance", instanceId);
+                    // console.log("instance", instanceId);
                 }
                 break;
             case "mut":
@@ -164,16 +164,17 @@ async function main() {
                         }
                     }
                     const subRes = {
-                        type: "sub-res",
                         response: {
+                            type: "sub-res",
                             topic, id, change
                         },
                         id: -1
                     };
+                    // console.log("received mutate", change);
                     const subResStr = JSON.stringify(subRes);
                     walkSubscribers(topic, id, (ws) => {
                         ws.send(subResStr);
-                        // console.log("Sending mutation to client who sub'd");
+                        // console.log("Send mut to", subResStr, ws.remoteAddress);
                     });
                 }
                 break;

@@ -9,6 +9,18 @@ export interface Resolver<T> {
   (v: T): void;
 }
 
+export interface SubCb<T> {
+  (id: string, change: T): void;
+}
+export type TopicId = string;
+export type InstanceId = string;
+export type InstanceSubs = Map<InstanceId, Set<SubCb<any>>>;
+
+export interface TopicSubs {
+  cbs: Set<SubCb<any>>;
+  instanceSubs: InstanceSubs;
+}
+
 export class Client {
   ws: WebSocket;
   host: string;
@@ -26,10 +38,62 @@ export class Client {
   }
   responseResolvers: Map<number, Resolver<any>>;
 
+  subscriptions: Map<TopicId, TopicSubs>;
+
   constructor (host: string) {
     this.host = host;
     this.responseResolvers = new Map();
+    this.subscriptions = new Map();
   }
+  topicSubsGetOrCreate (topic: string): TopicSubs {
+    let result = this.subscriptions.get(topic);
+    if (!result) {
+      result = {
+        cbs: new Set(),
+        instanceSubs: new Map()
+      };
+      this.subscriptions.set(topic, result);
+    }
+    return result;
+  }
+
+  instanceSubsListGetOrCreate (
+    topicSubs: TopicSubs, 
+    id: string
+    ) {
+    let list = topicSubs.instanceSubs.get(id);
+    if (!list) {
+      list = new Set<any>();
+      topicSubs.instanceSubs.set(id, list);
+    }
+    return list;
+  }
+
+  addSubscriber<T>(topic: string, id: string = undefined, cb: SubCb<T>) {
+    const topicSubs = this.topicSubsGetOrCreate(topic);
+    if (id !== undefined) {
+      this.instanceSubsListGetOrCreate(
+        topicSubs, id
+      ).add(cb);
+    } else {
+      topicSubs.cbs.add(cb);
+    }
+  }
+
+  walkSubscribers<T> (
+    topic: string,
+    id: string = undefined,
+    cb: (_cb: SubCb<T>)=> void) {
+    const topicSubs = this.topicSubsGetOrCreate(topic);
+    let list = id===undefined ?
+      topicSubs.cbs :
+      this.instanceSubsListGetOrCreate(topicSubs, id);
+
+    for (const _cb of list) {
+      cb(_cb);
+    }
+  }
+
   connect (): Promise<void> {
     return new Promise((_resolve,_reject)=>{
       this.ws = new WebSocket(`ws://${this.host}`);
@@ -54,8 +118,20 @@ export class Client {
 
         //if json has a valid id
         if (json.id) {
-          console.log("WSS sent response", json);
+          // console.log("WSS sent response", json);
           //we probably used it for storing a resolver
+          
+          if (json.response.type === "sub-res") {
+            this.walkSubscribers(
+              json.response.topic,
+              json.response.id,
+              (_cb)=>{
+                _cb(json.response.id, json.response.change);
+              }
+            );
+            return;
+          }
+
           const _resolve = this.responseResolvers.get(json.id);
           if (_resolve) {
             //if we did, json.response is our answer and we stop listening
@@ -91,7 +167,7 @@ export class Client {
 
     return res;
   }
-  subscribe<InstanceType> (topic: string|SubConfig, cb: OnChange<InstanceType>) {
+  subscribe<InstanceType> (topic: string|SubConfig, cb: SubCb<InstanceType>) {
     let cfg = topic as SubConfig;
     if (typeof(topic) === "string") {
       // cfg.onlyDeliverDeltas = false;
@@ -99,6 +175,7 @@ export class Client {
       cfg = topic;
       topic = cfg.topic as string;
     }
+    this.addSubscriber(topic, cfg.id, cb as any);
     return this.sendMessage("sub", cfg);
   }
   unsubscribe (topic: string) {
@@ -115,8 +192,8 @@ export class Client {
       "instance", {topic}
     );
   }
-  listInstances (topic: string) {
-    return this.sendMessage("list", {
+  listInstances<T> (topic: string) {
+    return this.sendMessage<{list: {[key:string]: T}}>("list", {
       topic
     });
   }

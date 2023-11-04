@@ -34,16 +34,16 @@ async function main () {
   });
   
   //create a storage for chunks, will be owned by our client
-  client.createSchema("chunks", {
-    type: "dict",
-    children: {
-      "x": { type: "number" },
-      "y": { type: "number" },
-      "w": { type: "number" },
-      "h": { type: "number" },
-      "data": { type: "Uint8Array" }
-    }
-  });
+  // client.createSchema("chunks", {
+  //   type: "dict",
+  //   children: {
+  //     "x": { type: "number" },
+  //     "y": { type: "number" },
+  //     "w": { type: "number" },
+  //     "h": { type: "number" },
+  //     "data": { type: "Uint8Array" }
+  //   }
+  // });
   
   interface Player {
     name: string;
@@ -70,27 +70,42 @@ async function main () {
     //upload our initial player data
     client.mutate("players", localId, {
       name: "RepComm",
-      x: 0,
-      y: 0
+      x: 1,
+      y: 2
     });
   
-  
-    //simulate changing constantly from our end
-    setInterval(()=>{
-  
+    const handleMouseMove = (evt: MouseEvent)=> {
       client.mutate("players", localId, {
-        x: Date.now(),
-        y: Date.now()
+        x: evt.clientX / window.innerWidth,
+        y: evt.clientY / window.innerHeight
       });
-  
-    }, 1000);
-  
+      // console.log("Sending mutate");
+    }
+    window.addEventListener("mousemove", handleMouseMove);
   });
 
-  client.listInstances("players").then((res)=>{
-    
-    console.log("list", res);
-  })
+  let allPlayers = new Map<string, Player>();
+
+  client.listInstances<Player>("players").then((res)=>{
+    const {list} = res;
+    console.log(res);
+    for (const id in list) {
+      const p = list[id];
+      allPlayers.set(id, p);
+
+      console.log("Other player", id);
+
+      client.subscribe<Player>({topic: "players", id }, (pid, change)=>{
+        const original = allPlayers.get(id);
+        for (const key in change) {
+          original[key] = change[key];
+        }
+        console.log("Player", id, "updated", original);
+      });
+    }
+  });
+
+
 }
 
 main();

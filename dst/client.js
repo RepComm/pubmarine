@@ -12,9 +12,48 @@ export class Client {
         return this.lastMessageId;
     }
     responseResolvers;
+    subscriptions;
     constructor(host) {
         this.host = host;
         this.responseResolvers = new Map();
+        this.subscriptions = new Map();
+    }
+    topicSubsGetOrCreate(topic) {
+        let result = this.subscriptions.get(topic);
+        if (!result) {
+            result = {
+                cbs: new Set(),
+                instanceSubs: new Map()
+            };
+            this.subscriptions.set(topic, result);
+        }
+        return result;
+    }
+    instanceSubsListGetOrCreate(topicSubs, id) {
+        let list = topicSubs.instanceSubs.get(id);
+        if (!list) {
+            list = new Set();
+            topicSubs.instanceSubs.set(id, list);
+        }
+        return list;
+    }
+    addSubscriber(topic, id = undefined, cb) {
+        const topicSubs = this.topicSubsGetOrCreate(topic);
+        if (id !== undefined) {
+            this.instanceSubsListGetOrCreate(topicSubs, id).add(cb);
+        }
+        else {
+            topicSubs.cbs.add(cb);
+        }
+    }
+    walkSubscribers(topic, id = undefined, cb) {
+        const topicSubs = this.topicSubsGetOrCreate(topic);
+        let list = id === undefined ?
+            topicSubs.cbs :
+            this.instanceSubsListGetOrCreate(topicSubs, id);
+        for (const _cb of list) {
+            cb(_cb);
+        }
     }
     connect() {
         return new Promise((_resolve, _reject) => {
@@ -37,8 +76,14 @@ export class Client {
                 }
                 //if json has a valid id
                 if (json.id) {
-                    console.log("WSS sent response", json);
+                    // console.log("WSS sent response", json);
                     //we probably used it for storing a resolver
+                    if (json.response.type === "sub-res") {
+                        this.walkSubscribers(json.response.topic, json.response.id, (_cb) => {
+                            _cb(json.response.id, json.response.change);
+                        });
+                        return;
+                    }
                     const _resolve = this.responseResolvers.get(json.id);
                     if (_resolve) {
                         //if we did, json.response is our answer and we stop listening
@@ -79,6 +124,7 @@ export class Client {
             cfg = topic;
             topic = cfg.topic;
         }
+        this.addSubscriber(topic, cfg.id, cb);
         return this.sendMessage("sub", cfg);
     }
     unsubscribe(topic) {
