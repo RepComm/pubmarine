@@ -84,6 +84,12 @@ export class Client {
                         });
                         return;
                     }
+                    else if (json.response.type === "sub-inst") {
+                        this.walkSubscribers(json.response.topic, undefined, (_cb) => {
+                            _cb(json.response.id, undefined, true);
+                        });
+                        return;
+                    }
                     const { resolve, reject } = this.responseResolvers.get(json.id);
                     if (resolve) {
                         //if we did, json.response is our answer and we stop listening
@@ -124,15 +130,18 @@ export class Client {
         return res;
     }
     subscribe(topic, cb) {
-        let cfg = topic;
+        let cfg = undefined;
         if (typeof (topic) === "string") {
-            // cfg.onlyDeliverDeltas = false;
+            cfg = {
+                topic
+            };
         }
         else {
             cfg = topic;
             topic = cfg.topic;
         }
         this.addSubscriber(topic, cfg.id, cb);
+        console.log("sending sub to server", cfg);
         return this.sendMessage("sub", cfg);
     }
     unsubscribe(topic) {

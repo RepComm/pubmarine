@@ -2,7 +2,6 @@ import { createServer } from "http";
 import serveHandler from "serve-handler";
 import { server as WebSocketServer } from "websocket";
 import { watchFile } from "fs";
-import { resolve as pathResolve } from "path";
 function originIsAllowed(origin) {
     return true;
 }
@@ -16,8 +15,6 @@ async function main() {
         return mod.auth;
     }
     let authFunc = await loadAuthFunc();
-    const currentDirectory = pathResolve('.');
-    console.log("Current dir (aka . ) is", currentDirectory);
     watchFile("./dst/auth.js", {
         persistent: true,
         interval: 4000
@@ -31,7 +28,7 @@ async function main() {
         }
     });
     httpServer = createServer((req, res) => {
-        console.log(req.url);
+        // console.log(req.url);
         if (req.url.startsWith("/api")) {
             res.writeHead(200, "success", {
                 "Content-Type": "application/json"
@@ -83,19 +80,26 @@ async function main() {
         const storage = subStorageGetOrCreate(topic);
         if (id !== undefined) {
             idSubsListGetOrCreate(storage, id).add(ws);
-            console.log("Added sub", topic, id, ws.remoteAddress);
+            console.log(`[sub] ${topic}:${id} -> client`);
         }
         else {
             storage.topicSubscribers.add(ws);
-            console.log("Added sub", topic, ws.remoteAddress);
+            console.log(`[sub] ${topic} -> client`);
         }
     }
     function walkSubscribers(topic, id = undefined, cb) {
         const storage = subStorageGetOrCreate(topic);
-        let list = id === undefined ?
-            storage.topicSubscribers :
-            idSubsListGetOrCreate(storage, id);
-        for (const ws of list) {
+        //call ID specific listeners first if present
+        if (id !== undefined) {
+            const idSubs = storage.idSubScribers.get(id);
+            if (idSubs) {
+                for (const ws of idSubs) {
+                    cb(ws);
+                }
+            }
+        }
+        //call topic subscribers always if present
+        for (const ws of storage.topicSubscribers) {
             cb(ws);
         }
     }
@@ -137,7 +141,7 @@ async function main() {
                         res.error = `Invalid auth to create schema`;
                     }
                     else {
-                        console.log("schema-set", topic);
+                        console.log(`[schema] created "${topic}"`);
                         schemas.set(topic, {
                             shape,
                             instances: new Map()
@@ -145,15 +149,17 @@ async function main() {
                     }
                 }
                 break;
-            case "schema-get": {
-                let { topic } = req.msg;
-                const schema = schemas.get(topic);
-                if (!schema) {
-                    res.error = "no schema for topic";
-                    break;
+            case "schema-get":
+                {
+                    let { topic } = req.msg;
+                    const schema = schemas.get(topic);
+                    if (!schema) {
+                        res.error = "no schema for topic";
+                        break;
+                    }
+                    res.response.shape = schema.shape;
                 }
-                res.response.shape = schema.shape;
-            }
+                break;
             case "instance":
                 {
                     const topic = req.msg.topic;
@@ -165,7 +171,24 @@ async function main() {
                     const instanceId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
                     res.response.id = instanceId;
                     storage.instances.set(instanceId, {});
-                    // console.log("instance", instanceId);
+                    console.log("instance req", req);
+                    /**create a message to send to topic subscribers
+                     * to let them know a new instance exists
+                     */
+                    const subInstRes = {
+                        response: {
+                            type: "sub-inst",
+                            topic,
+                            id: instanceId
+                        },
+                        id: -1
+                    };
+                    const subInstResStr = JSON.stringify(subInstRes);
+                    console.log(`[schema] instanced "${topic}:${instanceId}"`);
+                    walkSubscribers(topic, undefined, (ws) => {
+                        console.log("Notifying", ws.remoteAddress, "of instance", instanceId);
+                        ws.send(subInstResStr);
+                    });
                 }
                 break;
             case "mut":
@@ -210,11 +233,9 @@ async function main() {
                         },
                         id: -1
                     };
-                    // console.log("received mutate", change);
                     const subResStr = JSON.stringify(subRes);
                     walkSubscribers(topic, id, (ws) => {
                         ws.send(subResStr);
-                        // console.log("Send mut to", subResStr, ws.remoteAddress);
                     });
                 }
                 break;
@@ -228,17 +249,19 @@ async function main() {
                 res.error = "unsub is not impl yet";
                 break;
             case "list":
-                const topic = req.msg.topic;
-                const storage = schemas.get(topic);
-                if (!storage) {
-                    res.error = `schema for topic was not found`;
-                    break;
+                {
+                    const topic = req.msg.topic;
+                    const storage = schemas.get(topic);
+                    if (!storage) {
+                        res.error = `schema for topic was not found`;
+                        break;
+                    }
+                    const list = {};
+                    storage.instances.forEach((v, k) => {
+                        list[k] = v;
+                    });
+                    res.response.list = list;
                 }
-                const list = {};
-                storage.instances.forEach((v, k) => {
-                    list[k] = v;
-                });
-                res.response.list = list;
                 break;
         }
         let str = JSON.stringify(res);

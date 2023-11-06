@@ -24,8 +24,7 @@ async function main() {
     //wait for connection
     await client.connect();
     //wait for authentication
-    const a = await client.authenticate({ apiKey }); //not impl yet
-    console.log("Authenticated", a);
+    await client.authenticate({ apiKey }); //not impl yet
     //create a storage for players, will be owned by our client
     if (!await client.hasSchema("players")) {
         await client.createSchema("players", {
@@ -45,22 +44,31 @@ async function main() {
     // //upload our initial player data
     await client.mutate("players", localId, {
         name: prompt("Enter player name", "testbot"),
-        x: 1,
-        y: 2
+        x: 0.5,
+        y: 0.5
     });
     const players = new Map();
     const insts = await client.listInstances("players");
     const { list } = insts.response;
-    for (const id in list) {
-        console.log("Player found by id", id);
-        const p = list[id];
-        players.set(id, p);
-        client.subscribe({ topic: "players", id }, (pid, change) => {
-            const original = players.get(id);
-            Object.assign(original, change);
-            // console.log("Player", id, "updated", change);
-        });
+    function addPlayer(id, data) {
+        players.set(id, data);
     }
+    for (const id in list) {
+        const p = list[id];
+        addPlayer(id, p);
+        console.log("Player identified in list", id);
+    }
+    await client.subscribe("players", (pid, change, isNewInstance) => {
+        console.log("sub msg");
+        if (isNewInstance) {
+            console.log("Player instanced", pid);
+            addPlayer(pid, { x: 0.5, y: 0.5, name: "" });
+        }
+        else {
+            const original = players.get(pid);
+            Object.assign(original, change);
+        }
+    });
     const mouseMoveDebounce = {
         timeLast: 0,
         timeWait: 50
@@ -72,7 +80,6 @@ async function main() {
             x: x / window.innerWidth,
             y: y / window.innerHeight
         });
-        // console.log("Sending mutate");
     };
     window.addEventListener("mousemove", (evt) => {
         handlePointerMove(evt.clientX, evt.clientY);

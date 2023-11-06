@@ -14,7 +14,7 @@ export interface ResolveReject<T> {
 }
 
 export interface SubCb<T> {
-  (id: string, change: T): void;
+  (id: string, change?: T, isNewInstance?: true): void;
 }
 export type TopicId = string;
 export type InstanceId = string;
@@ -134,6 +134,15 @@ export class Client {
               }
             );
             return;
+          } else if (json.response.type === "sub-inst") {
+            this.walkSubscribers(
+              json.response.topic,
+              undefined,
+              (_cb)=>{
+                _cb(json.response.id, undefined, true);
+              }
+            );
+            return;
           }
 
           const {resolve, reject} = this.responseResolvers.get(json.id);
@@ -179,14 +188,17 @@ export class Client {
     return res;
   }
   subscribe<InstanceType> (topic: string|SubConfig, cb: SubCb<InstanceType>) {
-    let cfg = topic as SubConfig;
+    let cfg = undefined;
     if (typeof(topic) === "string") {
-      // cfg.onlyDeliverDeltas = false;
+      cfg = {
+        topic
+      };
     } else {
       cfg = topic;
       topic = cfg.topic as string;
     }
     this.addSubscriber(topic, cfg.id, cb as any);
+    console.log("sending sub to server", cfg);
     return this.sendMessage("sub", cfg);
   }
   unsubscribe (topic: string) {

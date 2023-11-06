@@ -37,10 +37,6 @@ async function main() {
 
   let authFunc = await loadAuthFunc();
 
-  const currentDirectory = pathResolve('.');
-
-  console.log("Current dir (aka . ) is", currentDirectory);
-
   watchFile("./dst/auth.js", {
     persistent: true,
     interval: 4000
@@ -54,7 +50,7 @@ async function main() {
   });
 
   httpServer = createServer((req, res) => {
-    console.log(req.url);
+    // console.log(req.url);
     if (req.url.startsWith("/api")) {
       res.writeHead(200, "success", {
         "Content-Type": "application/json"
@@ -111,22 +107,31 @@ async function main() {
 
   function addSubscriber(topic: string, id: string = undefined, ws: connection) {
     const storage = subStorageGetOrCreate(topic);
+
     if (id !== undefined) {
       idSubsListGetOrCreate(storage, id).add(ws);
-      console.log("Added sub", topic, id, ws.remoteAddress);
+      console.log(`[sub] ${topic}:${id} -> client`);
     } else {
       storage.topicSubscribers.add(ws);
-      console.log("Added sub", topic, ws.remoteAddress);
+      console.log(`[sub] ${topic} -> client`);
     }
   }
 
   function walkSubscribers (topic: string, id: string = undefined, cb: (ws: connection)=>void) {
     const storage = subStorageGetOrCreate(topic);
-    let list = id===undefined ?
-      storage.topicSubscribers :
-      idSubsListGetOrCreate(storage, id);
+    
+    //call ID specific listeners first if present
+    if (id!==undefined) {
+      const idSubs = storage.idSubScribers.get(id);
+      if (idSubs) {
+        for (const ws of idSubs) {
+          cb(ws);
+        }
+      }
+    }
 
-    for (const ws of list) {
+    //call topic subscribers always if present
+    for (const ws of storage.topicSubscribers) {
       cb(ws);
     }
   }
@@ -164,7 +169,7 @@ async function main() {
         if (schemas.has(topic)) {
           res.error = `Invalid auth to create schema`;
         } else {
-          console.log("schema-set", topic);
+          console.log(`[schema] created "${topic}"`);
           schemas.set(topic, {
             shape,
             instances: new Map()
@@ -179,7 +184,7 @@ async function main() {
           break;
         }
         res.response.shape = schema.shape;
-      }
+      } break;
       case "instance": {
         const topic = (req.msg as { topic: string }).topic;
         const storage = schemas.get(topic);
@@ -195,7 +200,28 @@ async function main() {
         storage.instances.set(
           instanceId, {}
         );
-        // console.log("instance", instanceId);
+        console.log("instance req", req);
+        
+        /**create a message to send to topic subscribers
+         * to let them know a new instance exists
+         */
+        const subInstRes = {
+          response: {
+            type: "sub-inst",
+            topic,
+            id: instanceId
+          },
+          id: -1
+        } as MsgRes<any>;
+
+        const subInstResStr = JSON.stringify(subInstRes);
+        
+        console.log(`[schema] instanced "${topic}:${instanceId}"`);
+
+        walkSubscribers(topic, undefined, (ws)=>{
+          console.log("Notifying", ws.remoteAddress, "of instance", instanceId);
+          ws.send(subInstResStr);
+        });
 
       } break;
       case "mut": {
@@ -241,12 +267,10 @@ async function main() {
           id: -1
         } as MsgRes<any>;
 
-        // console.log("received mutate", change);
-
         const subResStr = JSON.stringify(subRes);
+
         walkSubscribers(topic, id, (ws)=>{
           ws.send(subResStr);
-          // console.log("Send mut to", subResStr, ws.remoteAddress);
         });
 
       } break;
@@ -257,7 +281,7 @@ async function main() {
       case "unsub":
         res.error = "unsub is not impl yet";
         break;
-      case "list":
+      case "list": {
         const topic = (req.msg as { topic: string }).topic;
         const storage = schemas.get(topic);
 
@@ -270,7 +294,7 @@ async function main() {
           list[k] = v;
         });
         res.response.list = list;
-        break;
+      } break;
     }
     let str = JSON.stringify(res);
     ws.send(str);
