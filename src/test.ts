@@ -29,7 +29,7 @@ async function main () {
   //they will not be able to mutate it across the server as the reference is gone
   
   //create a client that should connect to a server
-  const client = new Client("localhost:10209");
+  const client = new Client(window.location.host);
   
   //wait for connection
   await client.connect();
