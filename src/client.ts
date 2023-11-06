@@ -10,7 +10,7 @@ export interface Resolver<T> {
 }
 export interface ResolveReject<T> {
   resolve: Resolver<T>;
-  reject: (reason?: any)=> void;
+  reject: (reason?: any) => void;
 }
 
 export interface SubCb<T> {
@@ -30,26 +30,26 @@ export class Client {
   host: string;
 
   auth: ClientAuthRes;
-  authResolver: ()=>void;
+  authResolver: () => void;
 
   lastMessageId: number;
-  generateMessageId () {
+  generateMessageId() {
     if (!this.lastMessageId) {
       this.lastMessageId = 0;
     }
-    this.lastMessageId ++;
+    this.lastMessageId++;
     return this.lastMessageId;
   }
   responseResolvers: Map<number, ResolveReject<MsgRes<any>>>;
 
   subscriptions: Map<TopicId, TopicSubs>;
 
-  constructor (host: string) {
+  constructor(host: string) {
     this.host = host;
     this.responseResolvers = new Map();
     this.subscriptions = new Map();
   }
-  topicSubsGetOrCreate (topic: string): TopicSubs {
+  topicSubsGetOrCreate(topic: string): TopicSubs {
     let result = this.subscriptions.get(topic);
     if (!result) {
       result = {
@@ -61,10 +61,10 @@ export class Client {
     return result;
   }
 
-  instanceSubsListGetOrCreate (
-    topicSubs: TopicSubs, 
+  instanceSubsListGetOrCreate(
+    topicSubs: TopicSubs,
     id: string
-    ) {
+  ) {
     let list = topicSubs.instanceSubs.get(id);
     if (!list) {
       list = new Set<any>();
@@ -84,33 +84,42 @@ export class Client {
     }
   }
 
-  walkSubscribers<T> (
+  walkSubscribers<T>(
     topic: string,
     id: string = undefined,
-    cb: (_cb: SubCb<T>)=> void) {
-    const topicSubs = this.topicSubsGetOrCreate(topic);
-    let list = id===undefined ?
-      topicSubs.cbs :
-      this.instanceSubsListGetOrCreate(topicSubs, id);
+    cb: (_cb: SubCb<T>) => void) {
+      const topicSubs = this.subscriptions.get(topic);
+      if (topicSubs === undefined) return;
 
-    for (const _cb of list) {
-      cb(_cb);
-    }
+      //if walkSubscribers caller supplies an instance ID
+      if (id !== undefined) {
+        //try to call topic:id subscribers first if present
+        const idSubs = topicSubs.instanceSubs.get(id);
+        if (idSubs !== undefined) {
+          for (const _cb of idSubs) {
+            cb(_cb);
+          }
+        }
+      }
+      //try to call topic:any subscribers after if present
+      for (const _cb of topicSubs.cbs) {
+        cb(_cb);
+      }
   }
 
-  connect (): Promise<void> {
-    return new Promise((_resolve,_reject)=>{
+  connect(): Promise<void> {
+    return new Promise((_resolve, _reject) => {
       this.ws = new WebSocket(`ws://${this.host}`);
-      this.ws.addEventListener("open", (evt)=>{
+      this.ws.addEventListener("open", (evt) => {
         _resolve();
         return;
       });
-      this.ws.addEventListener("close", (evt)=>{
-        
+      this.ws.addEventListener("close", (evt) => {
+
       });
 
       //listen to websocket messages from server
-      this.ws.addEventListener("message", (evt)=>{
+      this.ws.addEventListener("message", (evt) => {
         let json: MsgRes<any>;
 
         try {
@@ -122,14 +131,13 @@ export class Client {
 
         //if json has a valid id
         if (json.id) {
-          // console.log("WSS sent response", json);
           //we probably used it for storing a resolver
-          
-          if (json.response.type === "sub-res") {
+
+          if (json.response.type === "sub-mut") {
             this.walkSubscribers(
               json.response.topic,
               json.response.id,
-              (_cb)=>{
+              (_cb) => {
                 _cb(json.response.id, json.response.change);
               }
             );
@@ -138,14 +146,14 @@ export class Client {
             this.walkSubscribers(
               json.response.topic,
               undefined,
-              (_cb)=>{
+              (_cb) => {
                 _cb(json.response.id, undefined, true);
               }
             );
             return;
           }
 
-          const {resolve, reject} = this.responseResolvers.get(json.id);
+          const { resolve, reject } = this.responseResolvers.get(json.id);
           if (resolve) {
             //if we did, json.response is our answer and we stop listening
             this.responseResolvers.delete(json.id);
@@ -157,14 +165,14 @@ export class Client {
           }
         }
       });
-      this.ws.addEventListener("error", (evt)=>{
+      this.ws.addEventListener("error", (evt) => {
         _reject();
         return;
       });
     });
   }
-  sendMessage<Response extends MsgResResponse> (type: string, msg: any) {
-    return new Promise<MsgRes<Response>>((_resolve, _reject)=>{
+  sendMessage<Response extends MsgResResponse>(type: string, msg: any) {
+    return new Promise<MsgRes<Response>>((_resolve, _reject) => {
       const data = {
         type,
         msg,
@@ -180,16 +188,16 @@ export class Client {
       this.ws.send(str);
     });
   }
-  async authenticate (req: ClientAuthReq) {
+  async authenticate(req: ClientAuthReq) {
     const res = await this.sendMessage<ClientAuthRes>("auth", req);
 
     this.auth = res.response;
 
     return res;
   }
-  subscribe<InstanceType> (topic: string|SubConfig, cb: SubCb<InstanceType>) {
+  subscribe<InstanceType>(topic: string | SubConfig, cb: SubCb<InstanceType>) {
     let cfg = undefined;
-    if (typeof(topic) === "string") {
+    if (typeof (topic) === "string") {
       cfg = {
         topic
       };
@@ -198,20 +206,22 @@ export class Client {
       topic = cfg.topic as string;
     }
     this.addSubscriber(topic, cfg.id, cb as any);
-    console.log("sending sub to server", cfg);
+    console.log("[sub]", cfg);
     return this.sendMessage("sub", cfg);
   }
-  unsubscribe (topic: string) {
-    return this.sendMessage("unsub", {topic});
+  unsubscribe(topic: string) {
+    return this.sendMessage("unsub", { topic });
   }
-  createSchema (topic: string, shape: Shape) {
+  createSchema(topic: string, shape: Shape) {
+    console.log("[schema] creating", topic);
     return this.sendMessage("schema-set", { topic, shape });
   }
-  getSchema (topic: string) {
-    return this.sendMessage<SchemaGetRes>("schema-get", {topic});
+  getSchema(topic: string) {
+    return this.sendMessage<SchemaGetRes>("schema-get", { topic });
   }
-  hasSchema (topic: string) {
-    return new Promise<boolean>(async (resolve, reject)=>{
+  hasSchema(topic: string) {
+    console.log("[schema] check exists", topic);
+    return new Promise<boolean>(async (resolve, reject) => {
       try {
         await this.getSchema(topic);
       } catch (reason) {
@@ -220,20 +230,22 @@ export class Client {
       resolve(true);
     });
   }
-  instance (topic: string) {
+  instance(topic: string) {
+    console.log("[schema] instance", topic);
     return this.sendMessage<InstanceRes>(
-      "instance", {topic}
+      "instance", { topic }
     );
   }
-  listInstances<T> (topic: string) {
+  listInstances<T>(topic: string) {
+    console.log("[schema] list", topic);
     return this.sendMessage<ListInstancesRes<T>>("list", {
       topic
     });
   }
-  echo (msg: string) {
-    return this.sendMessage("echo", {msg});
+  echo(msg: string) {
+    return this.sendMessage("echo", { msg });
   }
-  mutate (topic: string, id: string, data: any) {
+  mutate(topic: string, id: string, data: any) {
     return this.sendMessage("mut", {
       topic,
       id,

@@ -47,11 +47,21 @@ export class Client {
         }
     }
     walkSubscribers(topic, id = undefined, cb) {
-        const topicSubs = this.topicSubsGetOrCreate(topic);
-        let list = id === undefined ?
-            topicSubs.cbs :
-            this.instanceSubsListGetOrCreate(topicSubs, id);
-        for (const _cb of list) {
+        const topicSubs = this.subscriptions.get(topic);
+        if (topicSubs === undefined)
+            return;
+        //if walkSubscribers caller supplies an instance ID
+        if (id !== undefined) {
+            //try to call topic:id subscribers first if present
+            const idSubs = topicSubs.instanceSubs.get(id);
+            if (idSubs !== undefined) {
+                for (const _cb of idSubs) {
+                    cb(_cb);
+                }
+            }
+        }
+        //try to call topic:any subscribers after if present
+        for (const _cb of topicSubs.cbs) {
             cb(_cb);
         }
     }
@@ -76,9 +86,8 @@ export class Client {
                 }
                 //if json has a valid id
                 if (json.id) {
-                    // console.log("WSS sent response", json);
                     //we probably used it for storing a resolver
-                    if (json.response.type === "sub-res") {
+                    if (json.response.type === "sub-mut") {
                         this.walkSubscribers(json.response.topic, json.response.id, (_cb) => {
                             _cb(json.response.id, json.response.change);
                         });
@@ -141,19 +150,21 @@ export class Client {
             topic = cfg.topic;
         }
         this.addSubscriber(topic, cfg.id, cb);
-        console.log("sending sub to server", cfg);
+        console.log("[sub]", cfg);
         return this.sendMessage("sub", cfg);
     }
     unsubscribe(topic) {
         return this.sendMessage("unsub", { topic });
     }
     createSchema(topic, shape) {
+        console.log("[schema] creating", topic);
         return this.sendMessage("schema-set", { topic, shape });
     }
     getSchema(topic) {
         return this.sendMessage("schema-get", { topic });
     }
     hasSchema(topic) {
+        console.log("[schema] check exists", topic);
         return new Promise(async (resolve, reject) => {
             try {
                 await this.getSchema(topic);
@@ -165,9 +176,11 @@ export class Client {
         });
     }
     instance(topic) {
+        console.log("[schema] instance", topic);
         return this.sendMessage("instance", { topic });
     }
     listInstances(topic) {
+        console.log("[schema] list", topic);
         return this.sendMessage("list", {
             topic
         });

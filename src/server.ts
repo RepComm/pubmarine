@@ -200,7 +200,6 @@ async function main() {
         storage.instances.set(
           instanceId, {}
         );
-        console.log("instance req", req);
         
         /**create a message to send to topic subscribers
          * to let them know a new instance exists
@@ -219,7 +218,6 @@ async function main() {
         console.log(`[schema] instanced "${topic}:${instanceId}"`);
 
         walkSubscribers(topic, undefined, (ws)=>{
-          console.log("Notifying", ws.remoteAddress, "of instance", instanceId);
           ws.send(subInstResStr);
         });
 
@@ -259,18 +257,19 @@ async function main() {
           }
         }
 
-        const subRes = {
+        const subMutRes = {
           response: {
-            type: "sub-res",
+            type: "sub-mut",
             topic, id, change
           },
           id: -1
         } as MsgRes<any>;
 
-        const subResStr = JSON.stringify(subRes);
+        const subMutResStr = JSON.stringify(subMutRes);
 
         walkSubscribers(topic, id, (ws)=>{
-          ws.send(subResStr);
+          // console.log("[sub] mutate -> client");
+          ws.send(subMutResStr);
         });
 
       } break;

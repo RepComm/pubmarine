@@ -16,17 +16,7 @@ function debounce (d: Debounce): boolean {
 
 async function main () {
 
-  //apiKey roles will determine API allowances, all on server side
-  //see docs for creating api keys
   const apiKey = "blah";
-  //most users will not be able to create schemas
-  //the owner of a schema can determine if other users can instantiate
-  //a user who instantiates will own their instantiation
-  //a user's instance can be configured to allow mutations from other users
-  
-  //when a schema owner deletes their a schema, the records will delete as well
-  //the owner of an instance of a deleted schema can retain their record
-  //they will not be able to mutate it across the server as the reference is gone
   
   //create a client that should connect to a server
   const client = new Client(window.location.host);
@@ -37,9 +27,10 @@ async function main () {
   //wait for authentication
   await client.authenticate({apiKey}); //not impl yet
   
-  //create a storage for players, will be owned by our client
-
+  //check if player schema exists yet
   if(!await client.hasSchema("players")) {
+
+    //if it doesn't, try to create it
     await client.createSchema("players", {
       type: "dict",
       children: {
@@ -48,62 +39,66 @@ async function main () {
         "name": { type: "string" }
       }
     });
-    console.log("Created player schema as didn't exist");
   }
   
+  //basic type checking, i'd love this to come from the schema..
   interface Player {
     name: string;
     x: number;
     y: number;
   }
+
+  //a map to track the players for rendering purposes
+  const renderedPlayers = new Map<string, Player>();
+  
+  const existingPlayers = (
+    await client.listInstances<Player>("players")
+  ).response.list;
+  
+  function addPlayer (id: string, data: Player) {
+    renderedPlayers.set(id, data);
+  }
+
+  //add pre-existing players
+  for (const id in existingPlayers) {
+    const p = existingPlayers[id];
+    addPlayer(id, p);
+  }
+
+  //listen to mutations to players, as well as future instantiations of players
+  await client.subscribe<Player>("players", (pid, change, isNewInstance)=>{
+    if (isNewInstance) {
+      //track new players as they join (including ours when it does)
+      addPlayer(pid, {x: 0.5, y: 0.5, name: ""});
+    } else {
+      //otherwise track changes by applying them to our copy of the data
+      const original = renderedPlayers.get(pid);
+      Object.assign(original, change);
+    }
+  });
   
   //instantiate a player, will be owned by our client
-  const inst = await client.instance("players");
-  const localId = inst.response.id;
+  const localId = (await client.instance("players")).response.id;
   
-  console.log(`Our player id: ${localId}`);
-
-  // //upload our initial player data
+  //upload our initial player data
   await client.mutate("players", localId, {
     name: prompt("Enter player name", "testbot"),
     x: 0.5,
     y: 0.5
   });
 
-  const players = new Map<string, Player>();
-  const insts = await client.listInstances<Player>("players");
-  
-  const {list} = insts.response;
-
-  function addPlayer (id: string, data: Player) {
-    players.set(id, data);
-  }
-
-  for (const id in list) {
-    const p = list[id];
-    addPlayer(id, p);
-    console.log("Player identified in list", id);
-  }
-
-  await client.subscribe<Player>("players", (pid, change, isNewInstance)=>{
-    console.log("sub msg");
-    if (isNewInstance) {
-      console.log("Player instanced", pid);
-      addPlayer(pid, {x: 0.5, y: 0.5, name: ""});
-    } else {
-      const original = players.get(pid);
-      Object.assign(original, change);
-    }
-  });
-  
+  //some debouncing of pointer move so we don't spam the server
   const mouseMoveDebounce: Debounce = {
     timeLast: 0,
     timeWait: 50
   };
 
   const handlePointerMove = (x: number, y: number)=> {
+    //don't bother if it has been an insignificant amount of time
+    //since last time we tried to update
     if (!debounce(mouseMoveDebounce)) return;
 
+    //publish our changed player data to the server
     client.mutate("players", localId, {
       x: x / window.innerWidth,
       y: y / window.innerHeight
@@ -114,40 +109,55 @@ async function main () {
     handlePointerMove(evt.clientX, evt.clientY);
   });
 
+  //mobile support!
   window.addEventListener("touchmove", (evt)=>{
     const touch = evt.touches[0];
     handlePointerMove(touch.clientX, touch.clientY);
   })
 
+  //grab the canvas from the HTML
   const canvas = document.querySelector("canvas");
+  //get a 2d drawing context
   const ctx = canvas.getContext("2d");
 
+  //runs for every frame
   const animate = (timeAbs: number)=>{
+    //clear the canvas
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
+    //save canvas state so we can revert view transformations
     ctx.save();
+
+    //draw black squares at each player coord
     ctx.fillStyle = "black";
     
-    for (const [pid, p] of players) {
+    for (const [pid, p] of renderedPlayers) {
       ctx.fillRect(p.x * canvas.width, p.y * canvas.height, 10, 10);
-      ctx.fillText(p.name, p.x, p.y - 20);
+      ctx.fillText(p.name, p.x * canvas.width, p.y * canvas.height);
+      
     }
 
-    ctx.restore();
+    ctx.restore(); //revert view transformations
 
+    //ask politely to be called next frame
     window.requestAnimationFrame(animate);  
   };
 
+  //start intial frame request
+  window.requestAnimationFrame(animate);
+
+  //call when the canvas needs to be resized
   const handleCanvasSize = ()=>{
     const r = canvas.getBoundingClientRect();
     canvas.width = Math.floor(r.width);
     canvas.height = Math.floor(r.height);
   };
+
+  //listen to window resize to adjust canvas
   window.addEventListener("resize", handleCanvasSize);
+
+  //call canvas resize once upon app start
   setTimeout(handleCanvasSize, 100);
-
-  window.requestAnimationFrame(animate);
-
 }
 
 main();
