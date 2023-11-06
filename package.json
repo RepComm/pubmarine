@@ -15,7 +15,7 @@
   "scripts": {
     "build": "npx tsc",
     "server": "node .",
-    "publish": "npm publish --access public"
+    "pub": "npm publish --access public"
   },
   "repository": {
     "type": "git",
