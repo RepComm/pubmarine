@@ -24,7 +24,8 @@ async function main() {
     //wait for connection
     await client.connect();
     //wait for authentication
-    // await client.authenticate({apiKey}); //not impl yet
+    const a = await client.authenticate({ apiKey }); //not impl yet
+    console.log("Authenticated", a);
     //create a storage for players, will be owned by our client
     if (!await client.hasSchema("players")) {
         await client.createSchema("players", {

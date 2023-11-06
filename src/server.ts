@@ -6,6 +6,8 @@ import serveHandler from "serve-handler";
 import { server as WebSocketServer } from "websocket";
 import { Message, connection } from "websocket";
 import { MsgReq, MsgRes, MutateReq, SchemaCreateReq, Shape, SubConfig } from "./common";
+import { watchFile } from "fs";
+import {resolve as pathResolve} from "path";
 
 function originIsAllowed(origin: string) {
   return true;
@@ -26,6 +28,30 @@ async function main() {
   let port = 10209;
 
   let httpServer: HttpServer;
+
+  async function loadAuthFunc () {
+    //call with current date time so caching is ignored
+    const mod = await import(`./auth.js?${Date.now()}`);
+    return mod.auth;
+  }
+
+  let authFunc = await loadAuthFunc();
+
+  const currentDirectory = pathResolve('.');
+
+  console.log("Current dir (aka . ) is", currentDirectory);
+
+  watchFile("./dst/auth.js", {
+    persistent: true,
+    interval: 4000
+  }, async (curr, prev)=>{
+    try {
+      console.log("Detected changes to auth.js Reloading auth() from auth.js");
+      authFunc = await loadAuthFunc();
+    } catch (ex) {
+      console.warn(ex);
+    }
+  });
 
   httpServer = createServer((req, res) => {
     console.log(req.url);
@@ -105,7 +131,7 @@ async function main() {
     }
   }
 
-  const onWebSocketMessage = (ws: connection, msg: Message) => {
+  const onWebSocketMessage = async (ws: connection, msg: Message) => {
     if (msg.type !== "utf8") return;
     const content = msg.utf8Data
     let req: MsgReq<any>;
@@ -123,9 +149,15 @@ async function main() {
     };
 
     switch (req.type) {
-      case "auth":
-        res.error = "auth is not impl yet";
-        break;
+      case "auth": {
+        let id: string;
+        try {
+          id = await authFunc(req);
+        } catch (ex) {
+          res.error = ex;
+        }
+        res.response.id = id;
+      } break;
       case "schema-set": {
         let { topic, shape } = (req as SchemaCreateReq).msg;
 
