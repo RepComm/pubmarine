@@ -1,7 +1,13 @@
+#!/usr/bin/env node
 import { createServer } from "http";
 import serveHandler from "serve-handler";
 import { server as WebSocketServer } from "websocket";
 import { watchFile } from "fs";
+import { join as pathJoin } from "path";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 function originIsAllowed(origin) {
     return true;
 }
@@ -9,13 +15,15 @@ async function main() {
     let hostname = "0.0.0.0";
     let port = 10209;
     let httpServer;
+    const dstPath = __dirname;
+    const authJsPath = pathJoin(__dirname, "./auth.js");
     async function loadAuthFunc() {
         //call with current date time so caching is ignored
-        const mod = await import(`./auth.js?${Date.now()}`);
+        const mod = await import(`${authJsPath}?${Date.now()}`);
         return mod.auth;
     }
     let authFunc = await loadAuthFunc();
-    watchFile("./dst/auth.js", {
+    watchFile(authJsPath, {
         persistent: true,
         interval: 4000
     }, async (curr, prev) => {
@@ -44,7 +52,7 @@ async function main() {
             serveHandler(req, res, {
                 cleanUrls: true,
                 directoryListing: false,
-                public: "./dst",
+                public: dstPath,
                 symlinks: false
             });
         }

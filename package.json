@@ -1,9 +1,16 @@
 {
-  "name": "pubmarine",
+  "name": "@repcomm/pubmarine",
   "type": "module",
   "version": "0.1.0",
   "description": "ephemeral pub sub networking for node/web",
   "main": "dst/server.js",
+  "types": "dst/client.d.ts",
+  "exports": {
+    "import": "./dst/client.js"
+  },
+  "bin": {
+    "pubmarine": "./dst/server.js"
+  },
   "scripts": {
     "build": "npx tsc",
     "server": "node ."
