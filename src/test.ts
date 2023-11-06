@@ -21,29 +21,21 @@ async function main () {
   await client.connect();
   
   //wait for authentication
-  await client.authenticate({apiKey});
+  // await client.authenticate({apiKey}); //not impl yet
   
   //create a storage for players, will be owned by our client
-  client.createSchema("players", {
-    type: "dict",
-    children: {
-      "x": { type: "number" },
-      "y": { type: "number" },
-      "name": { type: "string" }
-    }
-  });
-  
-  //create a storage for chunks, will be owned by our client
-  // client.createSchema("chunks", {
-  //   type: "dict",
-  //   children: {
-  //     "x": { type: "number" },
-  //     "y": { type: "number" },
-  //     "w": { type: "number" },
-  //     "h": { type: "number" },
-  //     "data": { type: "Uint8Array" }
-  //   }
-  // });
+
+  if(!await client.hasSchema("players")) {
+    await client.createSchema("players", {
+      type: "dict",
+      children: {
+        "x": { type: "number" },
+        "y": { type: "number" },
+        "name": { type: "string" }
+      }
+    });
+    console.log("Created player schema as didn't exist");
+  }
   
   interface Player {
     name: string;
@@ -52,59 +44,44 @@ async function main () {
   }
   
   //instantiate a player, will be owned by our client
-  client.instance("players").then((p)=>{
-    //@ts-expect-error
-    const localId = p.id;
-    
-    //listen to changes to players
-    client.subscribe<Player>({
+  const inst = await client.instance("players");
+  const localId = inst.response.id;
   
-      topic: "players",
-      
-      id: localId, //only listen to our player
-      
-    }, (data)=>{
-      console.log(data);
-    });
+  console.log(`Our player id: ${localId}`);
 
-    //upload our initial player data
+  // //upload our initial player data
+  await client.mutate("players", localId, {
+    name: "RepComm",
+    x: 1,
+    y: 2
+  });
+
+  const players = new Map<string, Player>();
+  const insts = await client.listInstances<Player>("players");
+  
+  const {list} = insts.response;
+
+  for (const id in list) {
+    console.log("Player found by id", id);
+    const p = list[id];
+    players.set(id, p);
+
+    client.subscribe<Player>({topic: "players", id }, (pid, change)=>{
+      const original = players.get(id);
+      Object.assign(original, change);
+      // console.log("Player", id, "updated", change);
+    });
+  }
+  
+  const handleMouseMove = (evt: MouseEvent)=> {
+    console.log("mouse move");
     client.mutate("players", localId, {
-      name: "RepComm",
-      x: 1,
-      y: 2
+      x: evt.clientX / window.innerWidth,
+      y: evt.clientY / window.innerHeight
     });
-  
-    const handleMouseMove = (evt: MouseEvent)=> {
-      client.mutate("players", localId, {
-        x: evt.clientX / window.innerWidth,
-        y: evt.clientY / window.innerHeight
-      });
-      // console.log("Sending mutate");
-    }
-    window.addEventListener("mousemove", handleMouseMove);
-  });
-
-  let allPlayers = new Map<string, Player>();
-
-  client.listInstances<Player>("players").then((res)=>{
-    const {list} = res;
-    console.log(res);
-    for (const id in list) {
-      const p = list[id];
-      allPlayers.set(id, p);
-
-      console.log("Other player", id);
-
-      client.subscribe<Player>({topic: "players", id }, (pid, change)=>{
-        const original = allPlayers.get(id);
-        for (const key in change) {
-          original[key] = change[key];
-        }
-        console.log("Player", id, "updated", original);
-      });
-    }
-  });
-
+    // console.log("Sending mutate");
+  }
+  window.addEventListener("mousemove", handleMouseMove);
 
 }
 

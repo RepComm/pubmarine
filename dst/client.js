@@ -84,11 +84,16 @@ export class Client {
                         });
                         return;
                     }
-                    const _resolve = this.responseResolvers.get(json.id);
-                    if (_resolve) {
+                    const { resolve, reject } = this.responseResolvers.get(json.id);
+                    if (resolve) {
                         //if we did, json.response is our answer and we stop listening
                         this.responseResolvers.delete(json.id);
-                        _resolve(json.response);
+                        if (json.error) {
+                            reject(json.error);
+                        }
+                        else {
+                            resolve(json);
+                        }
                     }
                 }
             });
@@ -106,13 +111,16 @@ export class Client {
                 id: this.generateMessageId()
             };
             const str = JSON.stringify(data);
-            this.responseResolvers.set(data.id, _resolve);
+            this.responseResolvers.set(data.id, {
+                resolve: _resolve,
+                reject: _reject
+            });
             this.ws.send(str);
         });
     }
     async authenticate(req) {
         const res = await this.sendMessage("auth", req);
-        this.auth = res;
+        this.auth = res.response;
         return res;
     }
     subscribe(topic, cb) {
@@ -136,6 +144,17 @@ export class Client {
     getSchema(topic) {
         return this.sendMessage("schema-get", { topic });
     }
+    hasSchema(topic) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                await this.getSchema(topic);
+            }
+            catch (reason) {
+                resolve(false);
+            }
+            resolve(true);
+        });
+    }
     instance(topic) {
         return this.sendMessage("instance", { topic });
     }
@@ -148,7 +167,7 @@ export class Client {
         return this.sendMessage("echo", { msg });
     }
     mutate(topic, id, data) {
-        this.sendMessage("mut", {
+        return this.sendMessage("mut", {
             topic,
             id,
             change: data

@@ -3,8 +3,17 @@ export interface ClientAuthReq {
   apiKey: string;
 }
 
-export interface ClientAuth {
+export interface ClientAuthRes extends MsgResResponse {
 
+}
+export interface SchemaGetRes extends MsgResResponse {
+  shape: Shape;
+}
+export interface InstanceRes extends MsgResResponse {
+  id: string;
+}
+export interface ListInstancesRes<T> extends MsgResResponse {
+  list: {[key:string]: T;}
 }
 
 export interface ShapeTypeMap {
@@ -48,7 +57,7 @@ export interface MsgRes<T extends MsgResResponse> {
 } 
 
 export type InstanceReq = MsgReq<{topic: string}>;
-// export type InstanceRes = MsgRes<{id: string}>;
+
 export type MutateReq = MsgReq<{
   topic: string;
   id: string;

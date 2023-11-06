@@ -1,5 +1,5 @@
 
-import type { ClientAuth, ClientAuthReq, MsgReq, MsgRes, Shape, SubConfig } from "./common.d.ts";
+import type { ClientAuthRes, ClientAuthReq, MsgReq, MsgRes, MsgResResponse, Shape, SubConfig, SchemaGetRes, InstanceReq, InstanceRes, ListInstancesRes } from "./common.d.ts";
 
 export interface OnChange<InstanceType> {
   (data: InstanceType): void;
@@ -7,6 +7,10 @@ export interface OnChange<InstanceType> {
 
 export interface Resolver<T> {
   (v: T): void;
+}
+export interface ResolveReject<T> {
+  resolve: Resolver<T>;
+  reject: (reason?: any)=> void;
 }
 
 export interface SubCb<T> {
@@ -25,7 +29,7 @@ export class Client {
   ws: WebSocket;
   host: string;
 
-  auth: ClientAuth;
+  auth: ClientAuthRes;
   authResolver: ()=>void;
 
   lastMessageId: number;
@@ -36,7 +40,7 @@ export class Client {
     this.lastMessageId ++;
     return this.lastMessageId;
   }
-  responseResolvers: Map<number, Resolver<any>>;
+  responseResolvers: Map<number, ResolveReject<MsgRes<any>>>;
 
   subscriptions: Map<TopicId, TopicSubs>;
 
@@ -132,11 +136,15 @@ export class Client {
             return;
           }
 
-          const _resolve = this.responseResolvers.get(json.id);
-          if (_resolve) {
+          const {resolve, reject} = this.responseResolvers.get(json.id);
+          if (resolve) {
             //if we did, json.response is our answer and we stop listening
             this.responseResolvers.delete(json.id);
-            _resolve(json.response);
+            if (json.error) {
+              reject(json.error);
+            } else {
+              resolve(json);
+            }
           }
         }
       });
@@ -146,8 +154,8 @@ export class Client {
       });
     });
   }
-  sendMessage<Result> (type: string, msg: any): Promise<Result> {
-    return new Promise<Result>((_resolve, _reject)=>{
+  sendMessage<Response extends MsgResResponse> (type: string, msg: any) {
+    return new Promise<MsgRes<Response>>((_resolve, _reject)=>{
       const data = {
         type,
         msg,
@@ -155,15 +163,18 @@ export class Client {
       } as MsgReq<any>;
       const str = JSON.stringify(data);
 
-      this.responseResolvers.set(data.id, _resolve);
+      this.responseResolvers.set(data.id, {
+        resolve: _resolve,
+        reject: _reject
+      });
 
       this.ws.send(str);
     });
   }
   async authenticate (req: ClientAuthReq) {
-    const res = await this.sendMessage<ClientAuth>("auth", req);
+    const res = await this.sendMessage<ClientAuthRes>("auth", req);
 
-    this.auth = res;
+    this.auth = res.response;
 
     return res;
   }
@@ -185,15 +196,25 @@ export class Client {
     return this.sendMessage("schema-set", { topic, shape });
   }
   getSchema (topic: string) {
-    return this.sendMessage("schema-get", {topic});
+    return this.sendMessage<SchemaGetRes>("schema-get", {topic});
+  }
+  hasSchema (topic: string) {
+    return new Promise<boolean>(async (resolve, reject)=>{
+      try {
+        await this.getSchema(topic);
+      } catch (reason) {
+        resolve(false);
+      }
+      resolve(true);
+    });
   }
   instance (topic: string) {
-    return this.sendMessage(
+    return this.sendMessage<InstanceRes>(
       "instance", {topic}
     );
   }
   listInstances<T> (topic: string) {
-    return this.sendMessage<{list: {[key:string]: T}}>("list", {
+    return this.sendMessage<ListInstancesRes<T>>("list", {
       topic
     });
   }
@@ -201,7 +222,7 @@ export class Client {
     return this.sendMessage("echo", {msg});
   }
   mutate (topic: string, id: string, data: any) {
-    this.sendMessage("mut", {
+    return this.sendMessage("mut", {
       topic,
       id,
       change: data

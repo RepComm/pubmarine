@@ -124,7 +124,7 @@ async function main() {
 
     switch (req.type) {
       case "auth":
-        res.error = "Not impl yet";
+        res.error = "auth is not impl yet";
         break;
       case "schema-set": {
         let { topic, shape } = (req as SchemaCreateReq).msg;
@@ -139,6 +139,15 @@ async function main() {
           });
         }
       } break;
+      case "schema-get": {
+        let { topic } = (req as SchemaCreateReq).msg;
+        const schema = schemas.get(topic);
+        if (!schema) {
+          res.error = "no schema for topic";
+          break;
+        }
+        res.response.shape = schema.shape;
+      }
       case "instance": {
         const topic = (req.msg as { topic: string }).topic;
         const storage = schemas.get(topic);
@@ -214,7 +223,7 @@ async function main() {
         addSubscriber(topic, id, ws);
       } break;
       case "unsub":
-        res.error = "Not impl yet";
+        res.error = "unsub is not impl yet";
         break;
       case "list":
         const topic = (req.msg as { topic: string }).topic;
