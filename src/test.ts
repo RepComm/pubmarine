@@ -1,5 +1,19 @@
 import { Client } from "./client.js";
 
+interface Debounce {
+  timeLast: number;
+  timeWait: number;
+}
+function debounce (d: Debounce): boolean {
+  const timeNow = Date.now();
+  let result = false;
+  if (timeNow - d.timeLast > d.timeWait) {
+    result = true;
+    d.timeLast = timeNow;
+  }
+  return result;
+}
+
 async function main () {
 
   //apiKey roles will determine API allowances, all on server side
@@ -51,7 +65,7 @@ async function main () {
 
   // //upload our initial player data
   await client.mutate("players", localId, {
-    name: "RepComm",
+    name: prompt("Enter player name", "testbot"),
     x: 1,
     y: 2
   });
@@ -73,15 +87,58 @@ async function main () {
     });
   }
   
-  const handleMouseMove = (evt: MouseEvent)=> {
-    console.log("mouse move");
+  const mouseMoveDebounce: Debounce = {
+    timeLast: 0,
+    timeWait: 50
+  };
+
+  const handlePointerMove = (x: number, y: number)=> {
+    if (!debounce(mouseMoveDebounce)) return;
+
     client.mutate("players", localId, {
-      x: evt.clientX / window.innerWidth,
-      y: evt.clientY / window.innerHeight
+      x: x / window.innerWidth,
+      y: y / window.innerHeight
     });
     // console.log("Sending mutate");
+    
   }
-  window.addEventListener("mousemove", handleMouseMove);
+  window.addEventListener("mousemove", (evt)=>{
+    handlePointerMove(evt.clientX, evt.clientY);
+  });
+
+  window.addEventListener("touchmove", (evt)=>{
+    const touch = evt.touches[0];
+    handlePointerMove(touch.clientX, touch.clientY);
+  })
+
+  const canvas = document.querySelector("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const animate = (timeAbs: number)=>{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    ctx.save();
+    ctx.fillStyle = "black";
+    
+    for (const [pid, p] of players) {
+      ctx.fillRect(p.x * canvas.width, p.y * canvas.height, 10, 10);
+      ctx.fillText(p.name, p.x, p.y - 20);
+    }
+
+    ctx.restore();
+
+    window.requestAnimationFrame(animate);  
+  };
+
+  const handleCanvasSize = ()=>{
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(r.width);
+    canvas.height = Math.floor(r.height);
+  };
+  window.addEventListener("resize", handleCanvasSize);
+  setTimeout(handleCanvasSize, 100);
+
+  window.requestAnimationFrame(animate);
 
 }
 

@@ -22,7 +22,7 @@ interface SubStorage {
 }
 
 async function main() {
-  let hostname = "localhost";
+  let hostname = "0.0.0.0";
   let port = 10209;
 
   let httpServer: HttpServer;
