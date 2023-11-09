@@ -29,7 +29,7 @@ export declare class Service<ConnType> {
     handleMsgReqFromClient(client: Client<any>, msg: MsgReq<any>): Promise<void>;
     protected sendString(to: Client<any>, msg: string): void;
     send(to: Client<any>, msg: MsgRes<any>): void;
-    getOrCreateClient<ConnType>(clientId: ConnType): Client<ConnType>;
+    getOrCreateClient<ConnType>(clientId: ConnType, clientConn?: any): Client<ConnType>;
     removeClient<ConnType>(clientId: ConnType): void;
 }
 interface DataStorage {

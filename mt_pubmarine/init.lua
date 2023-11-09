@@ -37,7 +37,7 @@ function Client:connect ()
   self.udp_socket:settimeout(0)
   
   self.udp_socket:setsockname("*", 0)
-  self.udp_socket.setpeername(self.hostname, self.hostport)
+  self.udp_socket:setpeername(self.hostname, self.hostport)
 end
 
 function Client:topicSubsGetOrCreate(topic)
@@ -88,7 +88,7 @@ function Client:handleMsgRes (msg)
       msg.response.topic,
       msg.response.id,
       function (_cb)
-        _cb(json.reponse.id, json.response.change, false)
+        _cb(msg.reponse.id, msg.response.change, false)
       end
     )
     return
@@ -97,29 +97,33 @@ function Client:handleMsgRes (msg)
       msg.response.topic,
       nil,
       function (_cb)
-        _cb(json.reponse.id, nil, true)
+        _cb(msg.reponse.id, nil, true)
       end
     )
     return
   end
 
-  local resolve = self.responseResolvers[json.id]
+  local resolve = self.responseResolvers[msg.id]
   if resolve then
     --if we did, json.response is our answer and we stop listening
-    self.responseResolvers[json.id] = nil
-    resolve(json) --json.error should be handled by callback
+    self.responseResolvers[msg.id] = nil
+    resolve(msg) --json.error should be handled by callback
   end
 end
 
 function Client:step ()
   local data = self.udp_socket:receive()
+  if data == nil then
+    return
+  end
   local msg = minetest.parse_json(data)
   if msg ~= nil and msg.id ~= nil then
-    self.handleMsgRes(msg)
+    self:handleMsgRes(msg)
   end
 end
 
 function Client:sendString (msg)
+  print("Sending " ..msg)
   self.udp_socket:send(msg)
 end
 
@@ -135,10 +139,10 @@ function Client:sendMessage (type, req, onResolved)
   local msg = {
     type = type,
     msg = req,
-    id = self.generateMessageId()
+    id = self:generateMessageId()
   }
-  local str = minetest.serialize(req)
-  self.sendString(str)
+  local str = minetest.write_json(msg)
+  self:sendString(str)
 
   if onResolved ~= nil then
     self.responseResolvers[msg.id] = onResolved
@@ -147,9 +151,9 @@ end
 
 --id may be nil
 function Client:addSubscriber(topic, id, cb)
-  local topicSubs = self.topicSubsGetOrCreate(topic)
+  local topicSubs = self:topicSubsGetOrCreate(topic)
   if id ~= nil then
-    local list = self.instanceSubsListGetOrCreate(topicSubs, id)
+    local list = self:instanceSubsListGetOrCreate(topicSubs, id)
     table.insert(list, cb)
   else
     table.insert(topicSubs, cb)
@@ -157,7 +161,7 @@ function Client:addSubscriber(topic, id, cb)
 end
 
 function Client:authenticate(req, cb)
-  self.sendMessage("auth", req, function (res)
+  self:sendMessage("auth", req, function (res)
     if res.response ~= nil then
       --TODO handle error
       return
@@ -179,31 +183,31 @@ function Client:subscribe(topic, cb, onResolved)
     cfg = topic
     topic = cfg.topic
   end
-  self.addSubscriber(topic, cfg.id, cb);
-  print("[sub]" .. cfg)
-  self.sendMessage("sub", cfg, onResolved)
+  self:addSubscriber(topic, cfg.id, cb);
+  print("[sub] " .. dump(cfg))
+  self:sendMessage("sub", cfg, onResolved)
 end
 function Client:unsubscribe(topic, onResolved)
-  self.sendMessage("unsub", { topic = topic }, onResolved);
+  self:sendMessage("unsub", { topic = topic }, onResolved);
 end
 
 function Client:createSchema(topic, shape, onResolved)
-  print("[schema] creating" .. topic)
-  self.sendMessage("schema-set", { topic = topic, shape = shape }, onResolved);
+  print("[schema] creating" .. dump(topic))
+  self:sendMessage("schema-set", { topic = topic, shape = shape }, onResolved);
 end
 
 function Client:getSchema(topic, onResolved)
-  self.sendMessage("schema-get", { topic = topic }, onResolved);
+  self:sendMessage("schema-get", { topic = topic }, onResolved);
 end
 function Client:hasSchema(topic, onResolved)
   print("[schema] check exists" .. topic)
-  self.getSchema(topic, function (res)
+  self:getSchema(topic, function (res)
       onResolved(res.error == nil)
   end)
 end
 function Client:instance(topic, onResolved)
   print("[schema] instance" .. topic)
-  self.sendMessage(
+  self:sendMessage(
     "instance", { topic = topic },
     onResolved
   )
@@ -211,13 +215,13 @@ end
 
 function Client:listInstances(topic, onResolved)
   print("[schema] list " .. topic);
-  self.sendMessage("list", {
+  self:sendMessage("list", {
     topic = topic
   }, onResolved)
 end
 
 function Client:mutate(topic, id, data, onResolved)
-  self.sendMessage("mut", {
+  self:sendMessage("mut", {
     topic = topic,
     id = id,
     change = data
@@ -245,9 +249,25 @@ function debounce_check(d)
 end
 
 function test ()
-  local client = Client:new("0.0.0.0", 10209)
+  local client = Client:new("0.0.0.0", 10211)
   client:connect()
   
+  client:hasSchema("players", function (exists)
+    print("Schema players exists? " .. tostring(exists))
+    if not exists then
+      client:createSchema("players", {
+        type = "dict",
+        children = {
+          x = { type = "number" },
+          y = { type = "number" },
+          name = { type = "string" }
+        }
+      }, function (res)
+        print(minetest.write_json(res))
+      end)
+    end
+  end)
+
   local d_net = debounce_create(250)
 
   minetest.register_globalstep(function(dtime)
@@ -258,4 +278,4 @@ function test ()
 
 end
 
--- test()
+test()

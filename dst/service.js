@@ -39,10 +39,10 @@ export class Service {
         const str = JSON.stringify(msg);
         this.sendString(to, str);
     }
-    getOrCreateClient(clientId) {
+    getOrCreateClient(clientId, clientConn = undefined) {
         let result = this.clients.get(clientId);
         if (result === undefined) {
-            result = new Client(this, clientId);
+            result = new Client(this, clientConn || clientId);
             this.clients.set(clientId, result);
         }
         return result;
@@ -302,6 +302,7 @@ export class UdpService extends Service {
                 this.handleError("UdpService couldn't decode msg from client as utf-8 string");
                 return;
             }
+            console.log(`Client sent "${msgStr}"`);
             try {
                 msg = JSON.parse(msgStr);
             }
@@ -314,7 +315,7 @@ export class UdpService extends Service {
                 return;
             }
             const id = dgramRemoteInfoToClientId(remoteInfo);
-            const client = this.getOrCreateClient(id);
+            const client = this.getOrCreateClient(id, remoteInfo);
             this.handleMsgReqFromClient(client, msg);
         });
     }
@@ -324,6 +325,7 @@ export class UdpService extends Service {
     listen(address, port) {
         return new Promise(async (resolve, reject) => {
             this.serverSocket.bind(port, address, () => {
+                console.log("[service] udp listen @", address, port);
                 resolve({});
             });
         });
