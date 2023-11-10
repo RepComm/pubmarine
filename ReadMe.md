@@ -66,68 +66,26 @@ See [test.ts](./src/test.ts) and [test.html](./dst/test.html)
 
 ### minetest lua
 ```lua
+--create a client that should connect over UDP to port 10211
+local client = Client:new("0.0.0.0", 10211)
 
-  --create a debounce utility
-  function debounce_create (timeWait)
-    return {
-      timeWait = timeWait,
-      timeLast = 0
-    }
-  end
+--wait for player to join
+minetest.register_on_joinplayer(function (player)
 
-  --check a debounce obj and return true if it is a valid time to update whatever it is we want to update
-  --essentially a timer that relies on an external loop to call it like minetest.register_globalstep
-  function debounce_check(d)
-    local timeNow = minetest.get_us_time()/1000
-
-    local delta = timeNow - d.timeLast
-    local result = false
-    if delta > d.timeWait then
-      result = true
-    end
-
-    d.timeLast = timeNow
-
-    return result
-  end
-
-  --create a client that should connect over UDP to port 10211
-  local client = Client:new("0.0.0.0", 10211)
   client:connect() --udp doesn't really have "connections" but this does the setup still
-  
-  --check if players schema exists
-  client:hasSchema("players", function (exists)
-    print("Schema players exists? " .. tostring(exists))
 
-    --create it if it doesn't
-    if not exists then
-      client:createSchema("players", {
-        type = "dict",
-        children = {
-          x = { type = "number" },
-          y = { type = "number" },
-          name = { type = "string" }
-        }
-      }, function (res)
-        print(minetest.write_json(res))
-      end)
-    end
-  end)
-
-  --create a debouncer so we can avoid spamming the server if needed
-  local d_net = debounce_create(150)
-  
   --hook into minetest game loop with a function that is called several times per second
   minetest.register_globalstep(function(dtime)
-    --see if enough time has passed to perform an update (arbitrary, avoids undue CPU/network load)
-    if debounce_check(d_net) then
-      --allow the client to try and receive data from server and process it into events
-      client:step()
+    --network update
+    client:step()
+
+    local pos = player:get_pos()
+    client:mutate("players", localId, { x = pos.x, y = pos.z })
+
     end
   end)
 
-  --TODO: demonstrate client:subscribe and client:mutate
-
+end)
 ```
 
 ## authentication

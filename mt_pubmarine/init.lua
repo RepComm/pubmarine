@@ -239,14 +239,13 @@ function debounce_check(d)
   return false
 end
 
-function test (player)
-
-  local localId = nil
-
-  local pname = player:get_player_name()
+function test ()
 
   local client = Client:new("0.0.0.0", 10211)
   client:connect()
+  local localId = nil
+
+  local schemasOk = false
 
   client:hasSchema("players", function (exists)
     print("Schema players exists? " .. tostring(exists))
@@ -259,47 +258,102 @@ function test (player)
           name = { type = "string" }
         }
       }, function (res)
-        
-        client:instance("players", function (res)
-          localId = res.response.id
-          client:mutate("players", localId, { name = pname, x = 0.5, y = 0.5 })
-        end)
-
+        schemasOk = true
       end)
     else
-      client:instance("players", function (res)
-        localId = res.response.id
-        client:mutate("players", localId, { name = pname, x = 0.5, y = 0.5 })
-      end)
+      schemasOk = true
     end
   end)
 
+  local pnameInstMap = {}
+  function pnameInstGetOrCreate(pname)
+    local result = pnameInstMap[pname]
+    if not result then
+      result = {
+        id = nil, --id string from pubmarine
+        ref = nil, --a reference to minetest player obj
+        data = { --data that should be uploaded to pubmarine
+          name = pname,
+          x = 0,
+          y = 0,
+          z = 0
+        },
+        --tracking last position so we don't send duplicates
+        lpos = { x = 0, y = 0, z = 0 }
+      }
+      pnameInstMap[pname] = result
+    end
+    return result
+  end
+
+  function handle_player_join (player)
+    local pname = player:get_player_name()
+    local pdata = pnameInstGetOrCreate(pname)
+    pdata.ref = player
+  end
+
   local d_net = debounce_create(100)
-
-  local lpos = {x = 0, y = 0, z = 0}
-
   minetest.register_globalstep(function(dtime)
     if debounce_check(d_net) then
       client:step()
 
-      -- wait for pubmarine to give us an instance id
-      if not localId then
+      --wait for schemas to upload if necessary
+      if not schemasOk then
         return
       end
 
-      local pos = player:get_pos()
-      pos.x = pos.x / 10
-      pos.y = pos.y / 10
-      pos.z = pos.z / 10
-      if lpos.x ~= pos.x or lpos.y ~= pos.y or lpos.z ~= pos.z then
-        client:mutate("players", localId, { x = pos.x, y = pos.z })
-        lpos.x = pos.x
-        lpos.y = pos.y
-        lpos.z = pos.z
+      --loop over all tracked players
+      for pname,p in pairs(pnameInstMap) do
+        -- print("Looping over " ..pname)
+        --if we don't have an ID from pubmarine
+        if p.id == nil then
+          local _p = p
+          _p.id = "-1" --avoid race conditions
+          --get an id from pubmarine
+          client:instance("players", function (res)
+            _p.id = res.response.id
+          end)
+
+          goto continue
+        end
+        --if we don't have an id, but one is already being fetched
+        if p.id == "-1" then
+          --skip this player
+          goto continue
+        end
+        
+        --skip players without a reference
+        if p.ref == nil then
+          goto continue
+        end
+
+        local pos = p.ref:get_pos()
+        pos.x = pos.x / 10
+        pos.y = pos.z / 10 --flip y and z for /test.ts purposes
+        pos.z = pos.y / 10 --flip y and z for /test.ts purposes
+        if p.lpos.x ~= pos.x or p.lpos.y ~= pos.y or p.lpos.z ~= pos.z then
+          p.data.x = pos.x
+          p.data.y = pos.y
+          p.data.z = pos.z
+
+          client:mutate("players", p.id, p.data)
+          p.lpos.x = pos.x
+          p.lpos.y = pos.y
+          p.lpos.z = pos.z
+        
+        end
+
+        --a label to implement 'continue' functionality
+        ::continue::
       end
+      
+      -- end
     end
+
   end)
+
+  minetest.register_on_joinplayer(handle_player_join)
 
 end
 
-minetest.register_on_joinplayer(test)
+test()
