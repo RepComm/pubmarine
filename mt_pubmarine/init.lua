@@ -1,8 +1,5 @@
 
-local ie = nil
-local require = nil
 local socket = nil
-local assert = nil
 
 local udp = nil
 
@@ -10,10 +7,8 @@ local hostport = 10209
 local hostname = "0.0.0.0"
 
 if minetest ~= nil and minetest.request_insecure_environment ~= nil then
-  ie = minetest.request_insecure_environment()
-  require = ie.require
-  assert = ie.assert
-  socket = require("socket")
+  local ie = minetest.request_insecure_environment()
+  socket = ie.require("socket")
 end
 
 local Client = {}
@@ -123,7 +118,6 @@ function Client:step ()
 end
 
 function Client:sendString (msg)
-  print("Sending " ..msg)
   self.udp_socket:send(msg)
 end
 
@@ -206,7 +200,7 @@ function Client:hasSchema(topic, onResolved)
   end)
 end
 function Client:instance(topic, onResolved)
-  print("[schema] instance" .. topic)
+  print("[schema] instance req " .. topic)
   self:sendMessage(
     "instance", { topic = topic },
     onResolved
@@ -236,22 +230,24 @@ function debounce_create (timeWait)
 end
 function debounce_check(d)
   local timeNow = minetest.get_us_time()/1000
-
   local delta = timeNow - d.timeLast
-  local result = false
   if delta > d.timeWait then
-    result = true
+    d.timeLast = timeNow
+    return true
   end
 
-  d.timeLast = timeNow
-
-  return result
+  return false
 end
 
-function test ()
+function test (player)
+
+  local localId = nil
+
+  local pname = player:get_player_name()
+
   local client = Client:new("0.0.0.0", 10211)
   client:connect()
-  
+
   client:hasSchema("players", function (exists)
     print("Schema players exists? " .. tostring(exists))
     if not exists then
@@ -263,19 +259,47 @@ function test ()
           name = { type = "string" }
         }
       }, function (res)
-        print(minetest.write_json(res))
+        
+        client:instance("players", function (res)
+          localId = res.response.id
+          client:mutate("players", localId, { name = pname, x = 0.5, y = 0.5 })
+        end)
+
+      end)
+    else
+      client:instance("players", function (res)
+        localId = res.response.id
+        client:mutate("players", localId, { name = pname, x = 0.5, y = 0.5 })
       end)
     end
   end)
 
-  local d_net = debounce_create(250)
+  local d_net = debounce_create(100)
+
+  local lpos = {x = 0, y = 0, z = 0}
 
   minetest.register_globalstep(function(dtime)
     if debounce_check(d_net) then
       client:step()
+
+      -- wait for pubmarine to give us an instance id
+      if not localId then
+        return
+      end
+
+      local pos = player:get_pos()
+      pos.x = pos.x / 10
+      pos.y = pos.y / 10
+      pos.z = pos.z / 10
+      if lpos.x ~= pos.x or lpos.y ~= pos.y or lpos.z ~= pos.z then
+        client:mutate("players", localId, { x = pos.x, y = pos.z })
+        lpos.x = pos.x
+        lpos.y = pos.y
+        lpos.z = pos.z
+      end
     end
   end)
 
 end
 
-test()
+minetest.register_on_joinplayer(test)

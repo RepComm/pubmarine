@@ -101,7 +101,7 @@ async function main () {
     //publish our changed player data to the server
     client.mutate("players", localId, {
       x: x / window.innerWidth,
-      y: y / window.innerHeight
+      y: 1 - (y / window.innerHeight)
     });
     
   }
@@ -132,8 +132,13 @@ async function main () {
     ctx.fillStyle = "black";
     
     for (const [pid, p] of renderedPlayers) {
-      ctx.fillRect(p.x * canvas.width, p.y * canvas.height, 10, 10);
-      ctx.fillText(p.name, p.x * canvas.width, p.y * canvas.height);
+      const rx = p.x * canvas.width;
+      const ry = (1 - p.y) * canvas.height;
+      const w = canvas.width / 10;
+      const h = canvas.height / 10;
+
+      ctx.fillRect(rx, ry, w, h);
+      ctx.fillText(p.name, rx, ry);
       
     }
 

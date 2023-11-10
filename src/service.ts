@@ -341,8 +341,7 @@ export class UdpService extends Service<RemoteInfo> {
         this.handleError("UdpService couldn't decode msg from client as utf-8 string");
         return;
       }
-      console.log(`Client sent "${msgStr}"`);
-
+      
       try {
         msg = JSON.parse(msgStr);
       } catch (ex) {
